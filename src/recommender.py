@@ -43,6 +43,7 @@ class Recommender:
     Required by tests/test_recommender.py
     """
     def __init__(self, songs: List[Song]):
+        """Store the song catalog this recommender will rank."""
         self.songs = songs
 
     def _score(self, user: UserProfile, song: Song) -> Tuple[float, List[str]]:
@@ -53,12 +54,12 @@ class Recommender:
         # Genre match: flat point bonus
         if song.genre == user.favorite_genre:
             score += GENRE_MATCH_POINTS
-            reasons.append(f"matches your favorite genre ({song.genre})")
+            reasons.append(f"genre match ({song.genre}) (+{GENRE_MATCH_POINTS:.1f})")
 
         # Mood match: flat point bonus
         if song.mood == user.favorite_mood:
             score += MOOD_MATCH_POINTS
-            reasons.append(f"matches your mood ({song.mood})")
+            reasons.append(f"mood match ({song.mood}) (+{MOOD_MATCH_POINTS:.1f})")
 
         # Energy closeness: rewards being NEAR the target, not just high/low.
         # closeness is 1.0 at a perfect match and 0.0 at the opposite end.
@@ -66,12 +67,14 @@ class Recommender:
         energy_points = closeness * ENERGY_MATCH_POINTS
         score += energy_points
         if closeness >= 0.85:
-            reasons.append(f"energy ({song.energy:.2f}) is close to your target ({user.target_energy:.2f})")
+            reasons.append(
+                f"energy ({song.energy:.2f}) close to target ({user.target_energy:.2f}) (+{energy_points:.1f})"
+            )
 
         # Acoustic preference: nudge toward/away from acoustic tracks
         if user.likes_acoustic and song.acousticness >= 0.6:
             score += 0.5
-            reasons.append("is acoustic, which you like")
+            reasons.append("acoustic, which you like (+0.5)")
 
         if not reasons:
             reasons.append("weak overall match")
@@ -79,10 +82,12 @@ class Recommender:
         return score, reasons
 
     def recommend(self, user: UserProfile, k: int = 5) -> List[Song]:
+        """Return the top k songs for the user, ranked by score (highest first)."""
         ranked = sorted(self.songs, key=lambda s: self._score(user, s)[0], reverse=True)
         return ranked[:k]
 
     def explain_recommendation(self, user: UserProfile, song: Song) -> str:
+        """Return a one-line, human-readable explanation of a song's score."""
         score, reasons = self._score(user, song)
         return f"Score {score:.2f} — " + "; ".join(reasons)
 
@@ -125,18 +130,21 @@ def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
 
     if song["genre"] == user_prefs.get("favorite_genre", user_prefs.get("genre")):
         score += GENRE_MATCH_POINTS
-        reasons.append(f"matches your favorite genre ({song['genre']})")
+        reasons.append(f"genre match ({song['genre']}) (+{GENRE_MATCH_POINTS:.1f})")
 
     if song["mood"] == user_prefs.get("favorite_mood", user_prefs.get("mood")):
         score += MOOD_MATCH_POINTS
-        reasons.append(f"matches your mood ({song['mood']})")
+        reasons.append(f"mood match ({song['mood']}) (+{MOOD_MATCH_POINTS:.1f})")
 
     target_energy = user_prefs.get("target_energy", user_prefs.get("energy"))
     if target_energy is not None:
         closeness = 1.0 - abs(target_energy - song["energy"])
-        score += closeness * ENERGY_MATCH_POINTS
+        energy_points = closeness * ENERGY_MATCH_POINTS
+        score += energy_points
         if closeness >= 0.85:
-            reasons.append(f"energy ({song['energy']:.2f}) is close to your target ({target_energy:.2f})")
+            reasons.append(
+                f"energy ({song['energy']:.2f}) close to target ({target_energy:.2f}) (+{energy_points:.1f})"
+            )
 
     if not reasons:
         reasons.append("weak overall match")
